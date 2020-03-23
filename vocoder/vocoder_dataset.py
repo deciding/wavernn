@@ -9,51 +9,55 @@ import os
 
 class VocoderDataset(Dataset):
     #def __init__(self, metadata_fpath: Path, mel_dir: Path, wav_dir: Path):
-    def __init__(self, dataset_dir, mel_dir, audio_dir):
+    def __init__(self, dataset_dirs, mel_dir, audio_dir):
         #print("Using inputs from:\n\t%s\n\t%s\n\t%s" % (metadata_fpath, mel_dir, wav_dir))
 
         gta_fpaths=[]
         wav_fpaths=[]
-        for speaker in os.listdir(dataset_dir):
-            #if not os.path.isdir("%s/%s" % (dataset_dir, speaker)):
-            #    continue
-            metadata_filename="%s/%s/train.txt" % (dataset_dir, speaker)
-            with open(metadata_filename, "r", encoding='utf-8') as metadata_file:
-                metadata = [line.strip().split("|") for line in metadata_file]
-            gta_fnames = [x[1] for x in metadata if int(x[4])]
-            wav_fnames = [x[0] for x in metadata if int(x[4])]
-            for i in range(len(gta_fnames)):
-                gta_fname=gta_fnames[i]
-                wav_fname=wav_fnames[i]
-                gta_fpath="%s/%s/%s/%s" % (dataset_dir, speaker, mel_dir, gta_fname)
-                wav_fpath="%s/%s/%s/%s" % (dataset_dir, speaker, audio_dir, wav_fname)
-                if not os.path.exists(gta_fpath) or not os.path.exists(wav_fpath):
+        for dataset_dir in dataset_dirs:
+            #import pdb;pdb.set_trace()
+            for speaker in os.listdir(dataset_dir):
+                #if not os.path.isdir("%s/%s" % (dataset_dir, speaker)):
+                #    continue
+                metadata_filename="%s/%s/train.txt" % (dataset_dir, speaker)
+                if not os.path.exists(metadata_filename):
                     continue
-                gta_fpaths.append(gta_fpath)
-                wav_fpaths.append(wav_fpath)
+                with open(metadata_filename, "r", encoding='utf-8') as metadata_file:
+                    metadata = [line.strip().split("|") for line in metadata_file]
+                gta_fnames = [x[1] for x in metadata if int(x[4])]
+                wav_fnames = [x[0] for x in metadata if int(x[4])]
+                for i in range(len(gta_fnames)):
+                    gta_fname=gta_fnames[i]
+                    wav_fname=wav_fnames[i]
+                    gta_fpath="%s/%s/%s/%s" % (dataset_dir, speaker, mel_dir, gta_fname)
+                    wav_fpath="%s/%s/%s/%s" % (dataset_dir, speaker, audio_dir, wav_fname)
+                    if not os.path.exists(gta_fpath) or not os.path.exists(wav_fpath):
+                        continue
+                    gta_fpaths.append(gta_fpath)
+                    wav_fpaths.append(wav_fpath)
         self.samples_fpaths = list(zip(gta_fpaths, wav_fpaths))
-        
+
         print("Found %d samples" % len(self.samples_fpaths))
-    
-    def __getitem__(self, index):  
+
+    def __getitem__(self, index):
         mel_path, wav_path = self.samples_fpaths[index]
-        
+
         # Load the mel spectrogram and adjust its range to [-1, 1]
         mel = np.load(mel_path).T.astype(np.float32) / hp.mel_max_abs_value
-        
+
         # Load the wav
         wav = np.load(wav_path)
         if hp.apply_preemphasis:
             wav = audio.pre_emphasis(wav)
         wav = np.clip(wav, -1, 1)
-        
+
         # Fix for missing padding   # TODO: settle on whether this is any useful
         r_pad =  (len(wav) // hp.hop_length + 1) * hp.hop_length - len(wav)
         wav = np.pad(wav, (0, r_pad), mode='constant')
         assert len(wav) >= mel.shape[1] * hp.hop_length
         wav = wav[:mel.shape[1] * hp.hop_length]
         assert len(wav) % hp.hop_length == 0
-        
+
         # Quantize the wav
         if hp.voc_mode == 'RAW':
             if hp.mu_law:
@@ -62,22 +66,38 @@ class VocoderDataset(Dataset):
                 quant = audio.float_2_label(wav, bits=hp.bits)
         elif hp.voc_mode == 'MOL':
             quant = audio.float_2_label(wav, bits=16)
-            
+
         return mel.astype(np.float32), quant.astype(np.int64)
 
     def __len__(self):
         return len(self.samples_fpaths)
-        
-        
+
 def collate_vocoder(batch):
     mel_win = hp.voc_seq_len // hp.hop_length + 2 * hp.voc_pad
-    max_offsets = [x[0].shape[-1] -2 - (mel_win + 2 * hp.voc_pad) for x in batch]
+
+    #max_offsets = [0, x[0].shape[-1] -2 - (mel_win + 2 * hp.voc_pad) for x in batch]
+    max_offsets = [max(1, x[0].shape[-1] -2 - (mel_win + 2 * hp.voc_pad)) for x in batch]
     mel_offsets = [np.random.randint(0, offset) for offset in max_offsets]
     sig_offsets = [(offset + hp.voc_pad) * hp.hop_length for offset in mel_offsets]
 
     mels = [x[0][:, mel_offsets[i]:mel_offsets[i] + mel_win] for i, x in enumerate(batch)]
-
     labels = [x[1][sig_offsets[i]:sig_offsets[i] + hp.voc_seq_len + 1] for i, x in enumerate(batch)]
+    mels=[]
+    labels=[]
+    for i, x in enumerate(batch):
+        sliced_mel=x[0][:, mel_offsets[i]:mel_offsets[i] + mel_win]
+        if len(sliced_mel[0])<mel_win:
+            sliced_mel=np.pad(sliced_mel, [(0, 0), (0, mel_win-len(sliced_mel[0]))], mode='constant', constant_values=-hp.mel_max_abs_value)
+            print("padded mel with %f" % -hp.mel_max_abs_value)
+            assert len(sliced_mel[0])==mel_win
+        mels.append(sliced_mel)
+
+        sliced_sig=x[1][sig_offsets[i]:sig_offsets[i] + hp.voc_seq_len + 1]
+        if len(sliced_sig)<hp.voc_seq_len+1:
+            sliced_sig=np.pad(sliced_sig, (0, hp.voc_seq_len+1-len(sliced_sig)), mode='constant', constant_values=0)
+            print("padded seq with 0")
+            assert len(sliced_sig)==hp.voc_seq_len+1
+        labels.append(sliced_sig)
 
     mels = np.stack(mels).astype(np.float32)
     labels = np.stack(labels).astype(np.int64)

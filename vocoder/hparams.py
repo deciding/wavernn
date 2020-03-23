@@ -23,7 +23,8 @@ mu_law = True                       # Recommended to suppress noise if using raw
 # WAVERNN / VOCODER --------------------------------------------------------------------------------
 voc_mode = 'RAW'                    # either 'RAW' (softmax on raw bits) or 'MOL' (sample from 
 # mixture of logistics)
-voc_upsample_factors = (5, 5, 8)    # NB - this needs to correctly factorise hop_length
+#voc_upsample_factors = (5, 5, 8)    # NB - this needs to correctly factorise hop_length
+voc_upsample_factors = (3, 4, 5, 5)    # NB - this needs to correctly factorise hop_length
 voc_rnn_dims = 512
 voc_fc_dims = 512
 voc_compute_dims = 128

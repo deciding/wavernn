@@ -12,9 +12,11 @@ def synthesize_and_save(inpath, outpath):
     ## Post-generation
     # There's a bug with sounddevice that makes the audio cut one second earlier, so we
     # pad it.
-    generated_wav = np.pad(generated_wav, (0, 16000), mode="constant")
+    #generated_wav = np.pad(generated_wav, (0, 16000), mode="constant")
+    generated_wav = np.pad(generated_wav, (0, 24000), mode="constant")
     # Save it on the disk
-    librosa.output.write_wav(outpath, generated_wav.astype(np.float32), 16000)
+    #librosa.output.write_wav(outpath, generated_wav.astype(np.float32), 16000)
+    librosa.output.write_wav(outpath, generated_wav.astype(np.float32), 24000)
     pass
 
 #python vocoder_inference.py -i ../vox1_test/wav/ -o spkid --gpu_str 0

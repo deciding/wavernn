@@ -4,7 +4,10 @@ from pathlib import Path
 import argparse
 
 
-# python vocoder_train.py gta_model dummy --voc_dir ../../datasets/tts_training/training_wavernn -m gta_model
+#python vocoder_train.py gta_model_libritts_vctk_male dummy --voc_dirs ../datasets/tts_training/training_libritts_wavernn_24k_male ../datasets/tts_training/training_vctk_wavernn_24k_male -m gta_model
+#python vocoder_train.py gta_model_libritts_vctk_female dummy --voc_dirs ../datasets/tts_training/training_libritts_wavernn_24k_female ../datasets/tts_training/training_vctk_wavernn_24k_female -m gta_model
+
+# python vocoder_train.py gta_model dummy --voc_dir ../datasets/tts_training/training_wavernn -m gta_model
 # gta_model is run_id for saving model state, -m is the saved model path
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -12,7 +15,7 @@ if __name__ == "__main__":
                     "or ground truth mels.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    
+
     parser.add_argument("run_id", type=str, help= \
         "Name for this model instance. If a model state from the same run ID was previously "
         "saved, the training will restart from there. Pass -f to overwrite saved states and "
@@ -23,9 +26,10 @@ if __name__ == "__main__":
     parser.add_argument("--syn_dir", type=str, default=argparse.SUPPRESS, help= \
         "Path to the synthesizer directory that contains the ground truth mel spectrograms, "
         "the wavs and the embeds. Defaults to <datasets_root>/SV2TTS/synthesizer/.")
-    parser.add_argument("--voc_dir", type=str, default=argparse.SUPPRESS, help= \
-        "Path to the vocoder directory that contains the GTA synthesized mel spectrograms. "
-        "Defaults to <datasets_root>/SV2TTS/vocoder/. Unused if --ground_truth is passed.")
+    #parser.add_argument("--voc_dir", type=str, default=argparse.SUPPRESS, help= \
+    #    "Path to the vocoder directory that contains the GTA synthesized mel spectrograms. "
+    #    "Defaults to <datasets_root>/SV2TTS/vocoder/. Unused if --ground_truth is passed.")
+    parser.add_argument("--voc_dirs", nargs='+')
     parser.add_argument("-m", "--models_dir", type=str, default="vocoder/saved_models/", help=\
         "Path to the directory that will contain the saved model weights, as well as backups "
         "of those weights and wavs generated during training.")
@@ -45,9 +49,10 @@ if __name__ == "__main__":
     if not hasattr(args, "syn_dir"):
         args.syn_dir = Path(args.datasets_root, "SV2TTS", "synthesizer")
     args.syn_dir = Path(args.syn_dir)
-    if not hasattr(args, "voc_dir"):
-        args.voc_dir = Path(args.datasets_root, "SV2TTS", "vocoder")
-    args.voc_dir = Path(args.voc_dir)
+    #if not hasattr(args, "voc_dir"):
+    #    args.voc_dir = Path(args.datasets_root, "SV2TTS", "vocoder")
+    #args.voc_dir = Path(args.voc_dir)
+    args.voc_dirs = [Path(voc_dir) for voc_dir in args.voc_dirs]
     del args.datasets_root
     args.models_dir = Path(args.models_dir)
     args.models_dir.mkdir(exist_ok=True)
@@ -55,4 +60,4 @@ if __name__ == "__main__":
     # Run the training
     print_args(args, parser)
     train(**vars(args))
-    
+
