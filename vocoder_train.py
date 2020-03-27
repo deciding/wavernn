@@ -52,6 +52,8 @@ if __name__ == "__main__":
     #if not hasattr(args, "voc_dir"):
     #    args.voc_dir = Path(args.datasets_root, "SV2TTS", "vocoder")
     #args.voc_dir = Path(args.voc_dir)
+
+    # ONLY voc_dirs is useful
     args.voc_dirs = [Path(voc_dir) for voc_dir in args.voc_dirs]
     del args.datasets_root
     args.models_dir = Path(args.models_dir)

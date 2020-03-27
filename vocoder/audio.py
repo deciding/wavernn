@@ -95,11 +95,12 @@ def de_emphasis(x):
 def encode_mu_law(x, mu) :
     mu = mu - 1
     fx = np.sign(x) * np.log(1 + mu * np.abs(x)) / np.log(1 + mu)
+    # 0 to 1, and 4out5in
     return np.floor((fx + 1) / 2 * mu + 0.5)
 
 
 def decode_mu_law(y, mu, from_labels=True) :
-    if from_labels: 
+    if from_labels:
         y = label_2_float(y, math.log2(mu))
     mu = mu - 1
     x = np.sign(y) / mu * ((1 + mu) ** np.abs(y) - 1)

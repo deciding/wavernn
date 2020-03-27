@@ -22,30 +22,36 @@ def train(run_id: str, syn_dir: Path, voc_dirs: List[Path], models_dir: Path, gr
     # Instantiate the model
     print("Initializing the model...")
     model = WaveRNN(
-        rnn_dims=hp.voc_rnn_dims,
-        fc_dims=hp.voc_fc_dims,
-        bits=hp.bits,
-        pad=hp.voc_pad,
-        upsample_factors=hp.voc_upsample_factors,
-        feat_dims=hp.num_mels,
-        compute_dims=hp.voc_compute_dims,
-        res_out_dims=hp.voc_res_out_dims,
-        res_blocks=hp.voc_res_blocks,
-        hop_length=hp.hop_length,
-        sample_rate=hp.sample_rate,
-        mode=hp.voc_mode
+        rnn_dims=hp.voc_rnn_dims, # 512
+        fc_dims=hp.voc_fc_dims, # 512
+        bits=hp.bits, # 9
+        pad=hp.voc_pad, # 2
+        upsample_factors=hp.voc_upsample_factors, # (3, 4, 5, 5) -> 300, (5,5,12)?
+        feat_dims=hp.num_mels, # 80
+        compute_dims=hp.voc_compute_dims, # 128
+        res_out_dims=hp.voc_res_out_dims, # 128
+        res_blocks=hp.voc_res_blocks, # 10
+        hop_length=hp.hop_length, # 300
+        sample_rate=hp.sample_rate, # 24000
+        mode=hp.voc_mode # RAW (or MOL)
     ).cuda()
+
+    # hp.apply_preemphasis in VocoderDataset
+    # hp.mu_law in VocoderDataset
+    # hp.voc_seq_len in VocoderDataset
+    # hp.voc_lr in optimizer
+    # hp.voc_batch_size for train
 
     # Initialize the optimizer
     optimizer = optim.Adam(model.parameters())
     for p in optimizer.param_groups:
-        p["lr"] = hp.voc_lr
+        p["lr"] = hp.voc_lr # 0.0001
     loss_func = F.cross_entropy if model.mode == "RAW" else discretized_mix_logistic_loss
 
     # Load the weights
-    model_dir = models_dir.joinpath(run_id)
+    model_dir = models_dir.joinpath(run_id) # gta_model/gtaxxxx
     model_dir.mkdir(exist_ok=True)
-    weights_fpath = model_dir.joinpath(run_id + ".pt")
+    weights_fpath = model_dir.joinpath(run_id + ".pt") # gta_model/gtaxxx/gtaxxx.pt
     if force_restart or not weights_fpath.exists():
         print("\nStarting the training of WaveRNN from scratch\n")
         model.save(weights_fpath, optimizer)
@@ -82,18 +88,25 @@ def train(run_id: str, syn_dir: Path, voc_dirs: List[Path], models_dir: Path, gr
         start = time.time()
         running_loss = 0.
 
+        # start from 1
         for i, (x, y, m) in enumerate(data_loader, 1):
+            # cur [B, L], future [B, L] bit label, mels [B, D, T]
             x, m, y = x.cuda(), m.cuda(), y.cuda()
 
             # Forward pass
+            # [B, L], [B, D, T] -> [B, L, C]
             y_hat = model(x, m)
             if model.mode == 'RAW':
+                # [B, L, C] -> [B, C, L, 1]
                 y_hat = y_hat.transpose(1, 2).unsqueeze(-1)
             elif model.mode == 'MOL':
                 y = y.float()
+            # [B, L, 1]
             y = y.unsqueeze(-1)
 
             # Backward pass
+            # [B, C, L, 1], [B, L, 1]
+            # cross_entropy for RAW
             loss = loss_func(y_hat, y)
             optimizer.zero_grad()
             loss.backward()

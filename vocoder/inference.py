@@ -7,7 +7,7 @@ _model = None   # type: WaveRNN
 
 def load_model(weights_fpath, verbose=True):
     global _model
-    
+
     if verbose:
         print("Building Wave-RNN")
     _model = WaveRNN(
@@ -24,7 +24,7 @@ def load_model(weights_fpath, verbose=True):
         sample_rate=hp.sample_rate,
         mode=hp.voc_mode
     ).cuda()
-    
+
     if verbose:
         print("Loading model weights at %s" % weights_fpath)
     checkpoint = torch.load(weights_fpath)
@@ -36,23 +36,26 @@ def is_loaded():
     return _model is not None
 
 
-def infer_waveform(mel, normalize=True,  batched=True, target=8000, overlap=800, 
+def infer_waveform(mel, normalize=True,  batched=True, target=8000, overlap=800,
                    progress_callback=None):
     """
-    Infers the waveform of a mel spectrogram output by the synthesizer (the format must match 
+    Infers the waveform of a mel spectrogram output by the synthesizer (the format must match
     that of the synthesizer!)
-    
-    :param normalize:  
-    :param batched: 
-    :param target: 
-    :param overlap: 
-    :return: 
+
+    :param normalize:
+    :param batched:
+    :param target:
+    :param overlap:
+    :return:
     """
+    import pdb;pdb.set_trace()
     if _model is None:
         raise Exception("Please load Wave-RNN in memory before using it")
-    
+
+    # [D, T]
     if normalize:
-        mel = mel / hp.mel_max_abs_value
+        mel = mel / hp.mel_max_abs_value #[-4, 4] -> [-1, 1]
+    # [1, D, T]
     mel = torch.from_numpy(mel[None, ...])
     wav = _model.generate(mel, batched, target, overlap, hp.mu_law, progress_callback)
     return wav

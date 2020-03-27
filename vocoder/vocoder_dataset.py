@@ -51,6 +51,7 @@ class VocoderDataset(Dataset):
             wav = audio.pre_emphasis(wav)
         wav = np.clip(wav, -1, 1)
 
+        # r_pad to multiple of hop_length
         # Fix for missing padding   # TODO: settle on whether this is any useful
         r_pad =  (len(wav) // hp.hop_length + 1) * hp.hop_length - len(wav)
         wav = np.pad(wav, (0, r_pad), mode='constant')
@@ -60,10 +61,11 @@ class VocoderDataset(Dataset):
 
         # Quantize the wav
         if hp.voc_mode == 'RAW':
+            # help reduce noise
             if hp.mu_law:
                 quant = audio.encode_mu_law(wav, mu=2 ** hp.bits)
             else:
-                quant = audio.float_2_label(wav, bits=hp.bits)
+                quant = audio.float_2_label(wav, bits=hp.bits)# TODO 4out5in
         elif hp.voc_mode == 'MOL':
             quant = audio.float_2_label(wav, bits=16)
 
@@ -80,8 +82,9 @@ def collate_vocoder(batch):
     mel_offsets = [np.random.randint(0, offset) for offset in max_offsets]
     sig_offsets = [(offset + hp.voc_pad) * hp.hop_length for offset in mel_offsets]
 
-    mels = [x[0][:, mel_offsets[i]:mel_offsets[i] + mel_win] for i, x in enumerate(batch)]
-    labels = [x[1][sig_offsets[i]:sig_offsets[i] + hp.voc_seq_len + 1] for i, x in enumerate(batch)]
+    #mels = [x[0][:, mel_offsets[i]:mel_offsets[i] + mel_win] for i, x in enumerate(batch)]
+    #labels = [x[1][sig_offsets[i]:sig_offsets[i] + hp.voc_seq_len + 1] for i, x in enumerate(batch)]
+
     mels=[]
     labels=[]
     for i, x in enumerate(batch):
@@ -92,6 +95,7 @@ def collate_vocoder(batch):
             assert len(sliced_mel[0])==mel_win
         mels.append(sliced_mel)
 
+        # additional one for future
         sliced_sig=x[1][sig_offsets[i]:sig_offsets[i] + hp.voc_seq_len + 1]
         if len(sliced_sig)<hp.voc_seq_len+1:
             sliced_sig=np.pad(sliced_sig, (0, hp.voc_seq_len+1-len(sliced_sig)), mode='constant', constant_values=0)
@@ -115,4 +119,5 @@ def collate_vocoder(batch):
     if hp.voc_mode == 'MOL' :
         y = audio.label_2_float(y.float(), bits)
 
+    # cur [B, L], future [B, L] bit label, mels [B, D, T]
     return x, y, mels
