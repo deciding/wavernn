@@ -48,7 +48,6 @@ def infer_waveform(mel, normalize=True,  batched=True, target=8000, overlap=800,
     :param overlap:
     :return:
     """
-    import pdb;pdb.set_trace()
     if _model is None:
         raise Exception("Please load Wave-RNN in memory before using it")
 
@@ -58,4 +57,53 @@ def infer_waveform(mel, normalize=True,  batched=True, target=8000, overlap=800,
     # [1, D, T]
     mel = torch.from_numpy(mel[None, ...])
     wav = _model.generate(mel, batched, target, overlap, hp.mu_law, progress_callback)
+    return wav
+
+def load_new_model(weights_fpath, verbose=True):
+
+    if verbose:
+        print("Building Wave-RNN")
+    model = WaveRNN(
+        rnn_dims=hp.voc_rnn_dims,
+        fc_dims=hp.voc_fc_dims,
+        bits=hp.bits,
+        pad=hp.voc_pad,
+        upsample_factors=hp.voc_upsample_factors,
+        feat_dims=hp.num_mels,
+        compute_dims=hp.voc_compute_dims,
+        res_out_dims=hp.voc_res_out_dims,
+        res_blocks=hp.voc_res_blocks,
+        hop_length=hp.hop_length,
+        sample_rate=hp.sample_rate,
+        mode=hp.voc_mode
+    ).cuda()
+
+    if verbose:
+        print("Loading model weights at %s" % weights_fpath)
+    checkpoint = torch.load(weights_fpath)
+    model.load_state_dict(checkpoint['model_state'])
+    model.eval()
+    return model
+
+def infer_waveform_by_model(model, mel, normalize=True,  batched=True, target=8000, overlap=800,
+                   progress_callback=None):
+    """
+    Infers the waveform of a mel spectrogram output by the synthesizer (the format must match
+    that of the synthesizer!)
+
+    :param normalize:
+    :param batched:
+    :param target:
+    :param overlap:
+    :return:
+    """
+    if model is None:
+        raise Exception("Please load Wave-RNN in memory before using it")
+
+    # [D, T]
+    if normalize:
+        mel = mel / hp.mel_max_abs_value #[-4, 4] -> [-1, 1]
+    # [1, D, T]
+    mel = torch.from_numpy(mel[None, ...])
+    wav = model.generate(mel, batched, target, overlap, hp.mu_law, progress_callback)
     return wav
