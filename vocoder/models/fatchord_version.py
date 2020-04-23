@@ -1,3 +1,4 @@
+import os
 import time
 
 import numpy as np
@@ -468,7 +469,7 @@ class WaveRNN(nn.Module):
 
     def checkpoint(self, model_dir, optimizer) :
         k_steps = self.get_step() // 1000
-        self.save(model_dir.joinpath("checkpoint_%dk_steps.pt" % k_steps), optimizer)
+        self.save(os.path.join(model_dir, "checkpoint_%dk_steps.pt" % k_steps), optimizer)
 
     def log(self, path, msg) :
         with open(path, 'a') as f:

@@ -4,8 +4,8 @@ from vocoder.distribution import discretized_mix_logistic_loss
 from vocoder.display import stream, simple_table
 #from vocoder.gen_wavernn import gen_testset
 from torch.utils.data import DataLoader
-from pathlib import Path
-from typing import List
+#from pathlib import Path
+#from typing import List
 from torch import optim
 import torch.nn.functional as F
 import vocoder.hparams as hp
@@ -14,8 +14,11 @@ import time
 
 #CUDA_VISIBLE_DEVICES=3 python vocoder_train.py gta_model dummy --voc_dir ../datasets/tts_training/training_wavernn/ -m gta_model
 
-def train(run_id: str, syn_dir: Path, voc_dirs: List[Path], models_dir: Path, ground_truth: bool,
-          save_every: int, backup_every: int, force_restart: bool):
+def train(run_id='',
+        syn_dir=None, voc_dirs=[], mel_dir_name='', models_dir=None, log_dir='',
+        ground_truth=False,
+        save_every=1000, backup_every=1000, log_every=1000,
+        force_restart=False, total_epochs=10000, logger=None):
     # Check to make sure the hop length is correctly factorised
     assert np.cumprod(hp.voc_upsample_factors)[-1] == hp.hop_length
 
@@ -54,10 +57,10 @@ def train(run_id: str, syn_dir: Path, voc_dirs: List[Path], models_dir: Path, gr
     weights_fpath = model_dir.joinpath(run_id + ".pt") # gta_model/gtaxxx/gtaxxx.pt
     if force_restart or not weights_fpath.exists():
         print("\nStarting the training of WaveRNN from scratch\n")
-        model.save(weights_fpath, optimizer)
+        model.save(str(weights_fpath), optimizer)
     else:
         print("\nLoading weights at %s" % weights_fpath)
-        model.load(weights_fpath, optimizer)
+        model.load(str(weights_fpath), optimizer)
         print("WaveRNN weights loaded from step %d" % model.step)
 
     # Initialize the dataset
@@ -67,7 +70,7 @@ def train(run_id: str, syn_dir: Path, voc_dirs: List[Path], models_dir: Path, gr
     #wav_dir = syn_dir.joinpath("audio")
     #dataset = VocoderDataset(metadata_fpath, mel_dir, wav_dir)
     #dataset = VocoderDataset(str(voc_dir), 'mels-gta-1099579078086', 'audio')
-    dataset = VocoderDataset([str(voc_dir) for voc_dir in voc_dirs], 'mels-gta-170k', 'audio')
+    dataset = VocoderDataset([str(voc_dir) for voc_dir in voc_dirs], mel_dir_name, 'audio')
     #test_loader = DataLoader(dataset,
     #                         batch_size=1,
     #                         shuffle=True,
@@ -78,7 +81,7 @@ def train(run_id: str, syn_dir: Path, voc_dirs: List[Path], models_dir: Path, gr
                   ('LR', hp.voc_lr),
                   ('Sequence Len', hp.voc_seq_len)])
 
-    for epoch in range(1, 1000):
+    for epoch in range(1, total_epochs):
         data_loader = DataLoader(dataset,
                                  collate_fn=collate_vocoder,
                                  batch_size=hp.voc_batch_size,
@@ -120,14 +123,23 @@ def train(run_id: str, syn_dir: Path, voc_dirs: List[Path], models_dir: Path, gr
             k = step // 1000
 
             if backup_every != 0 and step % backup_every == 0 :
-                model.checkpoint(model_dir, optimizer)
+                model.checkpoint(str(model_dir), optimizer)
 
             if save_every != 0 and step % save_every == 0 :
-                model.save(weights_fpath, optimizer)
+                model.save(str(weights_fpath), optimizer)
 
-            msg = f"| Epoch: {epoch} ({i}/{len(data_loader)}) | " \
-                f"Loss: {avg_loss:.4f} | {speed:.1f} " \
-                f"steps/s | Step: {k}k | "
+            if log_every != 0 and step % log_every == 0 :
+                logger.scalar_summary("loss", loss.item(), step)
+
+            total_data=len(data_loader)
+
+            speed=speed
+            avg_loss=avg_loss
+            k=k
+            total_data=total_data
+            msg = ("| Epoch: {epoch} ({i}/{total_data}) | " +\
+                "Loss: {avg_loss:.4f} | {speed:.1f} " +\
+                "steps/s | Step: {k}k | ").format(**vars())
             stream(msg)
 
 
